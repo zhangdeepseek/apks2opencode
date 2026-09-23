@@ -1,0 +1,17 @@
+# 反编译产物和索引，不上传
+apks/
+repos/
+data/
+
+# 环境配置
+.env
+
+# 容器生成的文件
+.java-codebase-rag/
+.java-codebase-rag.yml
+.java-codebase-rag.hosts
+.mcp.json
+pom.xml
+
+# 系统文件
+.DS_Store

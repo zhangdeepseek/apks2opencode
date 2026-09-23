@@ -1,0 +1,31 @@
+services:
+  jadx-ai-mcp:
+    image: xjoker/jadx-ai-mcp:latest
+    ports:
+      - "${JADX_GUI_PORT:-6080}:6080"
+      - "${JADX_MCP_PORT:-8651}:8651"
+    volumes:
+      - ./apks:/apks
+    restart: unless-stopped
+
+  opencode:
+    build:
+      context: ./opencode          # Dockerfile 在 ./opencode 目录下
+      dockerfile: Dockerfile
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./repos:/workspace
+      - opencode-config:/root/.config/opencode
+      - opencode-data:/root/.local/share/opencode
+      - ./data/jrag-index:/data/jrag-index
+    environment:
+      - JRAG_INDEX_DIR=/data/jrag-index
+      - JRAG_SOURCE_ROOT=/workspace
+      - SBERT_DEVICE=${SBERT_DEVICE:-cpu}
+    entrypoint: ["/bin/sh", "-c", "/init-opencode.sh"]
+    restart: unless-stopped
+
+volumes:
+  opencode-config:
+  opencode-data:
