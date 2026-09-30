@@ -22,6 +22,7 @@ services:
     environment:
       - JRAG_INDEX_DIR=/data/jrag-index
       - JRAG_SOURCE_ROOT=/workspace
+      - SBERT_MODEL=${SBERT_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
       - SBERT_DEVICE=${SBERT_DEVICE:-cpu}
     entrypoint: ["/bin/sh", "-c", "/init-opencode.sh"]
     restart: unless-stopped

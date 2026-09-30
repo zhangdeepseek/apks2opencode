@@ -1,17 +1,15 @@
 # apks2opencode
 
-[English](README.en.md) | 中文
+[English](README.md) | Chinese
 
-一套基于 Docker 的 APK 逆向分析环境。把 JADX 反编译、jrag 语义索引、OpenCode AI 助手串成流水线，让 AI 能理解反编译后的代码并追踪调用链。
+A Docker-based environment for APK reverse engineering and analysis. It integrates JADX (decompilation), jrag (semantic indexing), and the OpenCode AI assistant into a unified pipeline, enabling the AI ​​to understand decompiled code and trace call chains. **Advantages:**
 
-**优势：**
+- **One-click deployment**: `docker compose up` launches the entire environment; no need for manual installation or configuration.
+- **Natural language analysis**: No need to manually sift through code; simply ask questions like "Where is the payment logic?" or "Who calls this function?"
+- **Semantic search + Call chains**: jrag provides vector retrieval and graph queries, making it far more efficient than grep.
+- **Fully local indexing**: Code never leaves your machine; the index is persistent and supports incremental updates.
 
-- **一键部署**：`docker compose up` 拉起全套环境，不用逐个安装配置
-- **自然语言分析**：不用手动翻代码，直接问“支付逻辑在哪”、“谁调用了这个函数”
-- **语义搜索 + 调用链**：jrag 提供向量检索和图查询，比 grep 高效得多
-- **全本地索引**：代码不离开机器，索引持久化，可增量更新
-
-## 架构
+## Architecture
 
 ```
 ┌──────────────────┐         ┌─────────────────┐
@@ -20,148 +18,157 @@
 │  MCP Server(8651)│         │                 │
 └──────────────────┘         └────────┬────────┘
                                       │
-                             ┌────────▼────────┐
-                             │      jrag       │
-                             │  向量库 + 图库  │
-                             │ (MCP via stdio) │
-                             └─────────────────┘
+                             ┌────────▼───────────┐
+                             │      jrag          │
+                             │Vector DB + Graph DB│
+                             │ (MCP via stdio)    │
+                             └────────────────────┘
 ```
 
-- **jadx-ai-mcp**：提供 JADX GUI（noVNC）和 MCP HTTP 服务，用于精确反编译和 Android 专有信息
-- **opencode**：AI Agent，通过 MCP 协议调用 jrag 和 jadx
-- **jrag**：基于 jadx 源码构建的语义索引和调用图，随 opencode 一起安装
+- **jadx-ai-mcp**: Provides the JADX GUI (via noVNC) and an MCP HTTP service for precise decompilation and Android-specific information.
+- **opencode**: An AI Agent that invokes jrag and jadx via the MCP protocol.
+- **jrag**: A semantic index and call graph built upon jadx source code; installed alongside opencode.
 
-## 快速开始
+## Quick Start
 
-### 依赖
+### Dependencies
 
 - Docker + Docker Compose
-- 一个 OpenAI 兼容的 API（DeepSeek、SiliconFlow、OpenAI 等）
+- An OpenAI-compatible API (DeepSeek, SiliconFlow, OpenAI, etc.)
 
-### 启动
+### Startup
 
 ```bash
 docker compose up -d --build
 ```
 
-首次启动会：
-1. 下载 evil-opencode 最新版二进制
-2. 安装 jrag-cli（约 5-10 分钟）
-3. 创建 dummy pom.xml（如果源码目录为空）
-4. 构建初始索引
+Upon initial startup, the system will:
+1. Download the latest binary for evil-opencode.
+2. Install jrag-cli (takes approximately 5–10 minutes).
+3. Create a dummy `pom.xml` (if the source code directory is empty).
+4. Build the initial index.
 
-### 配置 API
+### API Configuration
 
-进入 OpenCode TUI 后，用 `/connect` 命令配置 API：
+After entering the OpenCode TUI, configure the API using the `/connect` command:
 
 ```bash
 docker attach opencode
 ```
 
-在 TUI 里执行 `/connect`，选择你的提供商，粘贴 API Key 和 Base URL。凭据会持久化在 `opencode-data` 卷中，后续无需重复配置。
+Execute within the TUI. Run `/connect`, select your provider, and paste the API Key and Base URL. Credentials are persisted in the `opencode-data` volume, so no re-configuration is needed later.
 
-### 添加 APK
+### Add an APK
 
 ```bash
 ./add_apk.sh /path/to/your_app.apk
 ```
 
-脚本会完成：复制 APK → jadx 反编译 → 源码合并到 `./repos` → 重建索引。
+The script performs the following steps: copies the APK → decompiles it with jadx → adds the source code to `./repos/Your_APK_Name` → rebuilds the index.
 
-### 使用
+### Usage
 
 ```bash
 docker attach opencode
 ```
 
-直接提问，例如：
+Ask questions directly, for example:
 
 ```
-这个 APP 里有哪些 Activity？
-com.example.MainActivity 调用了哪些关键服务？
+Which Activities are in this app?
+What key services does com.example.MainActivity call?
 ```
 
-`/mcp list` 查看 MCP 连接状态。
+Run `/mcp list` to check the MCP connection status.
 
-## 可选配置
+## Optional Configuration
 
-创建 `.env` 文件可覆盖以下默认值，**全部可选**：
+Create a `.env` file to override the following default values ​​(all are **optional**):
 
 ```env
-# JADX GUI 和 MCP 服务的对外端口
+# External ports for JADX GUI and MCP services
 JADX_GUI_PORT=6080
 JADX_MCP_PORT=8651
 
-# jrag 嵌入设备：cpu / cuda / mps
-# 有 NVIDIA 显卡设为 cuda，苹果设备设为 mps
+# jrag embedding model (choose a model from HuggingFace)
+SBERT_MODEL=sentence-transformers/all-MiniLM-L6-v2
+
+# jrag embedding device: cpu / cuda / mps
+# Set to 'cuda' for NVIDIA GPUs, or 'mps' for Apple devices
 SBERT_DEVICE=cpu
 ```
 
-## 已知坑
+## Known Issues / Pitfalls
 
-### 1. JADX 双 Token
+### 1. JADX Dual Tokens
 
-JADX 有**两套独立 Token**：
+JADX uses **two separate sets of tokens**:
 
-| Token | 默认值 | 作用 |
+| Token | Default Value | Purpose |
 |---|---|---|
-| Plugin Token | `jadx-plugin-secret-token` | GUI 插件内部通信（8650） |
-| MCP Admin Token | `admin-secret-token` | MCP Server 对外认证（8651） |
+| Plugin Token | `jadx-plugin-secret-token` | Internal GUI plugin communication (port 8650) |
+| MCP Admin Token | `admin-secret-token` | External MCP Server authentication (port 8651) |
 
-OpenCode 连接的是 MCP Server，必须用 Admin Token，格式为 `Bearer admin-secret-token`（注意空格）。
+OpenCode connects to the MCP Server, so you must use the Admin Token. The format is `Bearer admin-secret-token` (note the space).
 
-`init-opencode.sh` 已经配置好了默认值。如果自定义了 `JADX_MCP_AUTH_TOKEN`，需要同步修改 `init-opencode.sh` 中的 header。
+The default values ​​are already configured in `init-opencode.sh`. If you customize `JADX_MCP_AUTH_TOKEN`, you must also update the corresponding header in `init-opencode.sh`.
 
-### 2. jrag increment 检测不到新文件
+### 2. `jrag increment` does not detect new files
 
-`jrag increment` 只会更新已索引文件的变更，**不会扫描新增文件**。添加新 APK 后必须重建索引。
+`jrag increment` only updates changes to already indexed files; it **does not scan for newly added files**. You must rebuild the index after adding a new APK.
 
-`add_apk.sh` 已内置此逻辑：先尝试 increment，如果文件数不变，自动 fallback 到全量 `jrag install`。
+`add_apk.sh` includes this logic: it first attempts an incremental update; if the file count remains unchanged, it automatically falls back to a full `jrag install`.
 
-### 3. jadx GUI 需要手动加载 APK
+### 3. jadx GUI requires manual APK loading
 
-MCP 服务起来后，JADX GUI 里如果没有打开 APK，工具查不到任何东西。浏览器访问 `http://<IP>:6080`，在 GUI 里打开 `/apks/xxx.apk`。
+Once the MCP service is running, the tool cannot find anything unless an APK is opened in the JADX GUI. Access `http://<IP>:6080` in your browser and open `/apks/xxx.apk` within the GUI.
 
-## 项目结构
+### 4. Cross-APK FQN conflicts
+
+Subdirectory isolation resolves path conflicts but not FQN (Fully Qualified Name) conflicts. If two APKs both contain the class `com.example.package.class`, LadybugDB will still report a "Symbol already exists" error during graph construction.
+
+## Project Structure
 
 ```
 .
 ├── docker-compose.yml
-├── add_apk.sh              # 一键添加 APK
-├── .env                    # 可选配置
+├── add_apk.sh              # One-click APK addition
+├── .env                    # Optional configuration
 ├── opencode/
 │   ├── Dockerfile
 │   └── init-opencode.sh
-├── apks/                   # 放置 APK 文件
-├── repos/                  # 反编译后的 Java 源码
+├── apks/                   # Place APK files here
+├── repos/                  # Decompiled Java source code
+│   ├── apk_1/
+│   └── apk_2/
 └── data/
-    └── jrag-index/         # jrag 索引持久化
+└── jrag-index/         # jrag index persistence
 ```
 
-## 工作流建议
+## Recommended Workflow
 
-**给 AI 的提问模板**（省 Token）：
+**Prompt template for AI** (to save tokens):
 
-> 直接回答。只调用必要的工具，最多 1-2 次。不要做额外的状态验证。
+> Answer directly. Call only the necessary tools, at most 1–2 times. Do not perform extra state verification. **Analysis Workflow**:
 
-**分析流程**：
+1. Use `jrag search` to locate relevant classes.
+2. Use `jrag neighbors` / `callers` to trace the call chain.
+3. When precise source code is required, use jadx MCP or directly read files in `/workspace/Your_APK_Name`.
 
-1. `jrag search` 定位相关类
-2. `jrag neighbors` / `callers` 追调用链
-3. 需要精确源码时用 jadx MCP 或直接读 `/workspace` 下的文件
+**Multi-APK Management**:
 
-**多 APK 管理**：不同 APK 的源码合并到 `/workspace` 根目录。包名不同则互不冲突。
+Source code from different APKs is merged into the `/workspace/Your_APK_Name` root directory; there are no conflicts provided package names differ.
 
-## 已知限制
+## Known Limitations
 
-- jadx GUI 一次只能加载一个 APK
-- jrag 图查询不跨 APK
-- 默认嵌入模型对中文语义理解有限，建议用英文关键词
-- 大型 APK（10k+ 类）首次索引约 1 小时
+- The jadx GUI can only load one APK at a time.
+- jrag graph queries do not span across APKs.
+- The default embedding model has limited understanding of Chinese semantics; using English keywords is recommended.
+- Initial indexing for large APKs (10k+ classes) takes approximately 1 hour.
 
-## 致谢
+## Acknowledgments
 
-本项目是以下工具的编排配置，核心功能均由上游提供：
+This project is an orchestration of the following tools; core functionalities are provided by the upstream projects:
 
 - [evil-opencode](https://github.com/WinMin/evil-opencode)
 - [jrag](https://github.com/HumanBean17/jrag)

@@ -84,10 +84,11 @@ get_files_count() {
 BEFORE=$(get_files_count)
 echo -e "${BLUE}📊 当前索引文件数: $BEFORE${NC}"
 
-# 复制源码到宿主机 repos（挂载到 /workspace）
-echo -e "${BLUE}📂 合并源码到 $REPOS_DIR ...${NC}"
-cp -r "$JADX_OUT_HOST/sources/"* "$REPOS_DIR/" 2>/dev/null || true
-cp -r "$JADX_OUT_HOST/resources/"* "$REPOS_DIR/" 2>/dev/null || true
+# 复制源码到宿主机 repos（挂载到 /workspace/apk_basename）
+echo -e "${BLUE}📂 合并源码到 $REPOS_DIR/$APK_BASENAME ...${NC}"
+mkdir -p "$REPOS_DIR/$APK_BASENAME"
+cp -r "$JADX_OUT_HOST/sources/"* "$REPOS_DIR/$APK_BASENAME/" 2>/dev/null || true
+cp -r "$JADX_OUT_HOST/resources/"* "$REPOS_DIR/$APK_BASENAME/" 2>/dev/null || true
 echo -e "${GREEN}✅ 源码合并完成${NC}"
 
 # 尝试增量更新
@@ -114,4 +115,4 @@ echo -e "${BLUE}📋 最终索引统计:${NC}"
 docker compose exec -T opencode jrag meta | jq -r '"[\(.counts.files)] files, [\(.counts.types)] types, [\(.counts.calls)] calls"'
 
 echo -e "${GREEN}🎉 添加 APK 完成！${NC}"
-echo -e "${YELLOW}提示: 新 APK 的源码已合并到 /workspace，索引已更新。${NC}"
+echo -e "${YELLOW}提示: 新 APK 的源码已合并到 /workspace/$APK_BASENAME，索引已更新。${NC}"
