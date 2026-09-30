@@ -1,6 +1,6 @@
 # apks2opencode
 
-[English](README.md) | Chinese
+English | [中文](README.zh.md)
 
 A Docker-based environment for APK reverse engineering and analysis. It integrates JADX (decompilation), jrag (semantic indexing), and the OpenCode AI assistant into a unified pipeline, enabling the AI ​​to understand decompiled code and trace call chains. **Advantages:**
 
