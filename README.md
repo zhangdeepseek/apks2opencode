@@ -2,7 +2,9 @@
 
 English | [中文](README.zh.md)
 
-A Docker-based environment for APK reverse engineering and analysis. It integrates JADX (decompilation), jrag (semantic indexing), and the OpenCode AI assistant into a unified pipeline, enabling the AI ​​to understand decompiled code and trace call chains. **Advantages:**
+A Docker-based environment for APK reverse engineering and analysis. It integrates JADX (decompilation), jrag (semantic indexing), and the OpenCode AI assistant into a unified pipeline, enabling the AI to understand decompiled code and trace call chains.
+
+**Advantages:**
 
 - **One-click deployment**: `docker compose up` launches the entire environment; no need for manual installation or configuration.
 - **Natural language analysis**: No need to manually sift through code; simply ask questions like "Where is the payment logic?" or "Who calls this function?"
@@ -18,16 +20,16 @@ A Docker-based environment for APK reverse engineering and analysis. It integrat
 │  MCP Server(8651)│         │                 │
 └──────────────────┘         └────────┬────────┘
                                       │
-                             ┌────────▼───────────┐
-                             │      jrag          │
-                             │Vector DB + Graph DB│
-                             │ (MCP via stdio)    │
-                             └────────────────────┘
+                             ┌────────▼────────┐
+                             │      jrag       │
+                             │ VectorDB+GraphDB│
+                             │ (MCP via stdio) │
+                             └─────────────────┘
 ```
 
 - **jadx-ai-mcp**: Provides the JADX GUI (via noVNC) and an MCP HTTP service for precise decompilation and Android-specific information.
 - **opencode**: An AI Agent that invokes jrag and jadx via the MCP protocol.
-- **jrag**: A semantic index and call graph built upon jadx source code; installed alongside opencode.
+- **jrag**: A semantic index and call graph built from jadx source code; installed alongside opencode.
 
 ## Quick Start
 
@@ -43,8 +45,9 @@ docker compose up -d --build
 ```
 
 Upon initial startup, the system will:
-1. Download the latest binary for evil-opencode.
-2. Install jrag-cli (takes approximately 5–10 minutes).
+
+1. Download the latest `evil-opencode` binary.
+2. Install `jrag-cli` (takes approximately 5–10 minutes).
 3. Create a dummy `pom.xml` (if the source code directory is empty).
 4. Build the initial index.
 
@@ -56,7 +59,7 @@ After entering the OpenCode TUI, configure the API using the `/connect` command:
 docker attach opencode
 ```
 
-Execute within the TUI. Run `/connect`, select your provider, and paste the API Key and Base URL. Credentials are persisted in the `opencode-data` volume, so no re-configuration is needed later.
+Run `/connect` inside the TUI, select your provider, and paste the API Key and Base URL. Credentials are persisted in the `opencode-data` volume, so no re-configuration is needed later.
 
 ### Add an APK
 
@@ -64,7 +67,38 @@ Execute within the TUI. Run `/connect`, select your provider, and paste the API 
 ./add_apk.sh /path/to/your_app.apk
 ```
 
-The script performs the following steps: copies the APK → decompiles it with jadx → adds the source code to `./repos/Your_APK_Name` → rebuilds the index.
+The script performs the following steps: copies the APK → decompiles it with jadx → adds the source code to `./repos/<apk-name>/` → rebuilds the index. Each APK's source lives in its own subdirectory, so multiple APKs won't overwrite each other even if they share the same package name.
+
+### Install Recommended Skills (Optional)
+
+`install-skills.sh` installs a set of recommended OpenCode Skills for reverse engineering (routing pack + mobile static analysis). Skills extend the AI's domain knowledge without changing the core pipeline.
+
+Run it from the project root on the **host machine** — the script copies skills into the running `opencode` container and persists them via the `opencode-config` volume:
+
+```bash
+bash recommend-skills.sh
+```
+
+The script will:
+
+1. Locate the running `opencode` container (or start it if stopped)
+2. Clone skill repositories on the host
+3. Copy skills into `/root/.config/opencode/skills/` inside the container
+
+Installed skills:
+
+- `reverse-engineering` (from [zhaoxuya520/reverse-skill](https://github.com/zhaoxuya520/reverse-skill))
+- `mobile-reverse` (from [alvinhayy/Mobile-ReverseSkill](https://github.com/alvinhayy/Mobile-ReverseSkill))
+
+Restart OpenCode to apply:
+
+```bash
+docker compose restart opencode
+```
+
+Then ask inside the TUI: `What skills are available now?`
+
+> **Note**: `docker compose down -v` will delete the `opencode-config` volume (and all installed skills). Re-run `install-skills.sh` to restore.
 
 ### Usage
 
@@ -75,15 +109,15 @@ docker attach opencode
 Ask questions directly, for example:
 
 ```
-Which Activities are in this app?
-What key services does com.example.MainActivity call?
+What Activities are in this app?
+Which key services does com.example.MainActivity call?
 ```
 
-Run `/mcp list` to check the MCP connection status.
+Use `/mcp list` to check the MCP connection status.
 
 ## Optional Configuration
 
-Create a `.env` file to override the following default values ​​(all are **optional**):
+Create a `.env` file to override the following default values (all are **optional**):
 
 ```env
 # External ports for JADX GUI and MCP services
@@ -98,7 +132,7 @@ SBERT_MODEL=sentence-transformers/all-MiniLM-L6-v2
 SBERT_DEVICE=cpu
 ```
 
-## Known Issues / Pitfalls
+## Known Pitfalls
 
 ### 1. JADX Dual Tokens
 
@@ -111,7 +145,7 @@ JADX uses **two separate sets of tokens**:
 
 OpenCode connects to the MCP Server, so you must use the Admin Token. The format is `Bearer admin-secret-token` (note the space).
 
-The default values ​​are already configured in `init-opencode.sh`. If you customize `JADX_MCP_AUTH_TOKEN`, you must also update the corresponding header in `init-opencode.sh`.
+The default values are already configured in `init-opencode.sh`. If you customize `JADX_MCP_AUTH_TOKEN`, you must also update the corresponding header in `init-opencode.sh`.
 
 ### 2. `jrag increment` does not detect new files
 
@@ -125,7 +159,7 @@ Once the MCP service is running, the tool cannot find anything unless an APK is 
 
 ### 4. Cross-APK FQN conflicts
 
-Subdirectory isolation resolves path conflicts but not FQN (Fully Qualified Name) conflicts. If two APKs both contain the class `com.example.package.class`, LadybugDB will still report a "Symbol already exists" error during graph construction.
+Subdirectory isolation resolves path conflicts but not FQN (Fully Qualified Name) conflicts. If two APKs both contain the class `com.example.package.Class`, LadybugDB will still report a `Symbol already exists` error during graph construction.
 
 ## Project Structure
 
@@ -133,6 +167,7 @@ Subdirectory isolation resolves path conflicts but not FQN (Fully Qualified Name
 .
 ├── docker-compose.yml
 ├── add_apk.sh              # One-click APK addition
+├── install-skills.sh       # Install recommended OpenCode Skills
 ├── .env                    # Optional configuration
 ├── opencode/
 │   ├── Dockerfile
@@ -142,28 +177,28 @@ Subdirectory isolation resolves path conflicts but not FQN (Fully Qualified Name
 │   ├── apk_1/
 │   └── apk_2/
 └── data/
-└── jrag-index/         # jrag index persistence
+    └── jrag-index/         # Persistent jrag index
 ```
 
-## Recommended Workflow
+## Workflow Recommendations
 
 **Prompt template for AI** (to save tokens):
 
-> Answer directly. Call only the necessary tools, at most 1–2 times. Do not perform extra state verification. **Analysis Workflow**:
+> Answer directly. Call only the necessary tools—at most 1–2 times. Do not perform extra state verification.
+
+**Analysis Workflow:**
 
 1. Use `jrag search` to locate relevant classes.
 2. Use `jrag neighbors` / `callers` to trace the call chain.
-3. When precise source code is required, use jadx MCP or directly read files in `/workspace/Your_APK_Name`.
+3. When precise source code is required, use jadx MCP or directly read files in `/workspace/<apk-name>/`.
 
-**Multi-APK Management**:
-
-Source code from different APKs is merged into the `/workspace/Your_APK_Name` root directory; there are no conflicts provided package names differ.
+**Multi-APK Management**: Each APK's source code lives in its own subdirectory under `/workspace/`. Different APKs won't overwrite each other even if they share the same package name.
 
 ## Known Limitations
 
 - The jadx GUI can only load one APK at a time.
 - jrag graph queries do not span across APKs.
-- The default embedding model has limited understanding of Chinese semantics; using English keywords is recommended.
+- The default embedding model has limited understanding of Chinese semantics; using English keywords is recommended, or switch `SBERT_MODEL` to `BAAI/bge-small-zh-v1.5`.
 - Initial indexing for large APKs (10k+ classes) takes approximately 1 hour.
 
 ## Acknowledgments

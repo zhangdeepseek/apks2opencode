@@ -7,7 +7,7 @@
 **优势：**
 
 - **一键部署**：`docker compose up` 拉起全套环境，不用逐个安装配置
-- **自然语言分析**：不用手动翻代码，直接问“支付逻辑在哪”、“谁调用了这个函数”
+- **自然语言分析**：不用手动翻代码，直接问"支付逻辑在哪"、"谁调用了这个函数"
 - **语义搜索 + 调用链**：jrag 提供向量检索和图查询，比 grep 高效得多
 - **全本地索引**：代码不离开机器，索引持久化，可增量更新
 
@@ -45,6 +45,7 @@ docker compose up -d --build
 ```
 
 首次启动会：
+
 1. 下载 evil-opencode 最新版二进制
 2. 安装 jrag-cli（约 5-10 分钟）
 3. 创建 dummy pom.xml（如果源码目录为空）
@@ -66,7 +67,38 @@ docker attach opencode
 ./add_apk.sh /path/to/your_app.apk
 ```
 
-脚本会完成：复制 APK → jadx 反编译 → 源码添加到 `./repos/Your_APK_Name` → 重建索引。
+脚本会完成：复制 APK → jadx 反编译 → 源码添加到 `./repos/<apk名>/` → 重建索引。每个 APK 的源码放在独立子目录，多个 APK 即使包名相同也不会互相覆盖。
+
+### 安装推荐 Skill（可选）
+
+`install-skills.sh` 会为 OpenCode 装上一组逆向分析相关的 Skill（路由包 + 移动端静态分析）。Skill 只扩展 AI 的领域知识，不改动核心流水线。
+
+在项目根目录的**宿主机**上执行——脚本会把 Skill 拷进运行中的 `opencode` 容器，并通过 `opencode-config` 卷持久化：
+
+```bash
+bash recommend-skills.sh
+```
+
+脚本会：
+
+1. 定位运行中的 `opencode` 容器（未运行则自动启动）
+2. 在宿主机 clone Skill 仓库
+3. 拷进容器内的 `/root/.config/opencode/skills/`
+
+安装的 Skill：
+
+- `reverse-engineering`（来自 [zhaoxuya520/reverse-skill](https://github.com/zhaoxuya520/reverse-skill)）
+- `mobile-reverse`（来自 [alvinhayy/Mobile-ReverseSkill](https://github.com/alvinhayy/Mobile-ReverseSkill)）
+
+重启 OpenCode 生效：
+
+```bash
+docker compose restart opencode
+```
+
+进入 TUI 后问「现在有哪些可用的 skill？」即可验证。
+
+> **注意**：执行 `docker compose down -v` 会删除 `opencode-config` 卷，已安装的 Skill 也会一并清除。重新跑 `install-skills.sh` 即可恢复。
 
 ### 使用
 
@@ -92,7 +124,7 @@ com.example.MainActivity 调用了哪些关键服务？
 JADX_GUI_PORT=6080
 JADX_MCP_PORT=8651
 
-# jrag 嵌入模型，选择HuggingFace上的模型
+# jrag 嵌入模型，选择 HuggingFace 上的模型
 SBERT_MODEL=sentence-transformers/all-MiniLM-L6-v2
 
 # jrag 嵌入设备：cpu / cuda / mps
@@ -127,7 +159,7 @@ MCP 服务起来后，JADX GUI 里如果没有打开 APK，工具查不到任何
 
 ### 4. 跨 APK 的 FQN 冲突
 
-子目录隔离只解决路径冲突，不解决 FQN 冲突。如果两个 APK 都有 com.example.package.class 这个类，LadybugDB 建图时还是会报 Symbol already exists。
+子目录隔离只解决路径冲突，不解决 FQN（全限定类名）冲突。如果两个 APK 都有 `com.example.package.Class` 这个类，LadybugDB 建图时还是会报 `Symbol already exists`。
 
 ## 项目结构
 
@@ -135,6 +167,7 @@ MCP 服务起来后，JADX GUI 里如果没有打开 APK，工具查不到任何
 .
 ├── docker-compose.yml
 ├── add_apk.sh              # 一键添加 APK
+├── install-skills.sh       # 安装推荐 OpenCode Skill
 ├── .env                    # 可选配置
 ├── opencode/
 │   ├── Dockerfile
@@ -153,21 +186,19 @@ MCP 服务起来后，JADX GUI 里如果没有打开 APK，工具查不到任何
 
 > 直接回答。只调用必要的工具，最多 1-2 次。不要做额外的状态验证。
 
-**分析流程**：
+**分析流程：**
 
 1. `jrag search` 定位相关类
 2. `jrag neighbors` / `callers` 追调用链
-3. 需要精确源码时用 jadx MCP 或直接读 `/workspace/Your_APK_Name` 下的文件
+3. 需要精确源码时用 jadx MCP 或直接读 `/workspace/<apk名>/` 下的文件
 
-**多 APK 管理**：
-
-不同 APK 的源码合并到 `/workspace/Your_APK_Name` 根目录。包名不同则互不冲突。
+**多 APK 管理**：每个 APK 的源码放在 `/workspace/` 下各自的子目录，即使包名相同也不会互相覆盖。
 
 ## 已知限制
 
 - jadx GUI 一次只能加载一个 APK
 - jrag 图查询不跨 APK
-- 默认嵌入模型对中文语义理解有限，建议用英文关键词
+- 默认嵌入模型对中文语义理解有限，建议用英文关键词，或切换 `SBERT_MODEL` 为 `BAAI/bge-small-zh-v1.5`
 - 大型 APK（10k+ 类）首次索引约 1 小时
 
 ## 致谢
